@@ -1,0 +1,29 @@
+# craete env
+conda create -n [name] python==3.8
+
+# pip install
+* flask(or Django) install
+  - pip install flask
+* torch install
+  - conda install pytorch==1.13.1 torchvision==0.14.1 torchaudio==0.13.1 pytorch-cuda=11.7 -c pytorch -c nvidia
+* transformers install
+  - pip install transformers==4.31.0 
+* nemo toolkit install
+  - pip install nemo_toolkit['all']
+* torch geometric install
+  - pip install torch_geometric
+  - pip install torch-spline-conv -f https://data.pyg.org/whl/torch-1.13.0+cu117.html
+* opencv install
+  - pip install opencv-python
+* etc
+  - pip install facenet_pytorch
+  - pip install hesmotion
+  - pip install pyaudio
+    - sudo apt-get install portaudio19-dev
+  - pip install diffusers
+  - pip install networkx
+  - pip install googletrans
+* timm downgrade
+  - pip uninstall timm
+  - pip install timm==0.6.5
+

@@ -1,0 +1,283 @@
+
+<!DOCTYPE html>
+<html lang="ko">
+
+<head>
+    <meta charset="UTF-8">
+    <title>종합적 뉴럴 감정 분석 모델</title>
+    <style>
+        #header {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+        }
+        #startRecord {
+            padding: 15px 30px;  /* 위아래 패딩 15px, 양옆 패딩 30px */
+            background-color: #FF4500;
+            color: #FFF;
+            border: none;
+            border-radius: 25px;
+            font-weight: bold;
+            font-size: 16px;
+            cursor: pointer;
+            transition: background-color 0.3s, transform 0.3s;
+        }
+        
+        #startRecord:hover {
+            background-color: #FF6347; /* 호버 효과를 위한 색상 변경 */
+        }
+        
+        #startRecord:active {
+            transform: scale(0.95); /* 버튼을 클릭하면 약간 축소 */
+        }
+        #content {
+            display: flex;
+            flex-direction: column; /* 추가: flex 방향을 세로로 설정 */
+            align-items: left;
+            gap: 20px;
+        }
+    
+        .media-container {  /* 추가: 미디어와 결과 목록을 포함하는 컨테이너 */
+            display: flex;
+            align-items: left;
+            gap: 20px;
+        }
+
+        #graphs {
+            
+            display: flex;
+            gap: 20px;
+            justify-content: left;
+            margin-top: 20px;
+        }
+
+        canvas {
+            width: 640px;
+            height: 480px;
+            max-width: 640px;
+            max-height: 480px;
+        }
+        .hidden {
+            display: none;
+        }
+        .resultsListContainer {
+            border: 1px solid #ccc; /* 경계선 추가 */
+            padding: 15px; /* 내부 패딩 추가 */
+            width: 640px; /* 폭 설정 */
+            margin-top: 20px; /* 상단 마진 추가 */
+        }
+    </style>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+
+<body>
+    <div id="header">
+        <h2>종합적 뉴럴 감정 분석 모델</h2>
+        <button id="startRecord">감정 녹화 및 분석 시작</button>
+    </div>
+    <div id="content">
+        <div class="media-container">
+        <video id="webcam" width="640" height="480" autoplay muted></video>
+        <video id="recordedVideo" width="640" height="480" controls></video>
+        <img src="{{ url_for('static', filename=image_retrieval) }}" alt="image with reflected emotions" id="initialImage" style="max-width: 640px; max-height: 480px;">
+        <img id="retrievedImage" src="" alt="Retrieved Emotion Image" class="hidden" style="max-width: 640px; max-height: 480px;">
+        
+        <div id="resultsListContainer">
+            <h3>분석 결과 목록</h3>
+            <ul id="resultsList"></ul>
+        </div>
+    </div>
+    </div>
+
+    <div id="graphs">
+        <div>
+            <h3>Face Emotion</h3>
+            <canvas id="faceEmotionChart"></canvas>
+        </div>
+        <div>
+            <h3>Sound Emotion</h3>
+            <canvas id="soundEmotionChart"></canvas>
+        </div>
+        <div>
+            <h3>Text Emotion</h3>
+            <canvas id="textEmotionChart"></canvas>
+        </div>
+        <div>
+            <h3>Merged Emotion</h3>
+            <canvas id="mergedEmotionChart"></canvas>
+        </div>
+    </div>
+
+    <script>
+        const webcamElement = document.getElementById('webcam');
+        const recordedVideoElement = document.getElementById('recordedVideo');
+        const startRecordButton = document.getElementById('startRecord');
+        let mediaRecorder;
+        let recordedChunks = [];
+        const charts = {};
+        const resultsList = document.getElementById('resultsList');
+        const resultsData = [];
+
+        const emotionColors = {
+            'happy': '#FFD700',
+            'joy': '#FFD700',
+            'sad': '#1E90FF',
+            'sadness': '#1E90FF',
+            'angry': '#FF4500',
+            'anger': '#FF4500',
+            'contempt': '#FF4500',
+            'neutral': '#808080',
+            'surprised': '#FFC0CB',
+            'surprise': '#FFC0CB',
+            'fear': '#000000',
+            'disgust': '#990099',
+            'embarrassment': '#999900'
+        };
+
+        async function startWebcam() {
+            try{
+            const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+            webcamElement.srcObject = stream;
+            mediaRecorder = new MediaRecorder(stream);
+
+            mediaRecorder.ondataavailable = function (event) {
+                if (event.data.size > 0) {
+                    recordedChunks.push(event.data);
+                }
+            };
+
+            function getUniqueEmotions(emotionsData) {
+                return Object.keys(emotionsData);
+            }
+
+            function drawEmotionChart(canvasId, label, emotionsData) {
+                if (!emotionsData) {
+                    console.error("No emotion data provided for", label);
+                    return;
+                }
+            
+                const labels = Object.keys(emotionsData);
+                const data = labels.map(label => emotionsData[label] ? (emotionsData[label] * 100).toFixed(2) : 0);
+                const colors = labels.map(label => emotionColors[label] || '#000000');
+            
+                const ctx = document.getElementById(canvasId).getContext('2d');
+            
+                if (charts[canvasId]) {
+                    charts[canvasId].destroy();
+                }
+            
+                charts[canvasId] = new Chart(ctx, {
+                    type: 'bar',
+                    data: {
+                        labels: labels,
+                        datasets: [{
+                            label: label,
+                            data: data,
+                            backgroundColor: colors,
+                            borderColor: colors,
+                            borderWidth: 1
+                        }]
+                    },
+                    options: {
+                        scales: {
+                            x: { beginAtZero: true },
+                            y: {
+                                beginAtZero: true,
+                              
+                                    min: 0.0,
+                                    max: 100.0
+                                
+                            }
+                        },
+                        plugins: {
+                            legend: {
+                                display: false
+                            }
+                        }
+                    }
+                });
+            }
+            function displayEmotionData(emotionsData) {
+                                        drawEmotionChart('faceEmotionChart', 'Face Emotion', emotionsData.face_emotion);
+                                        drawEmotionChart('soundEmotionChart', 'Sound Emotion', emotionsData.sound_emotion);
+                                        drawEmotionChart('textEmotionChart', 'Text Emotion', emotionsData.text_emotion);
+                                        drawEmotionChart('mergedEmotionChart', 'Merged Emotion', emotionsData.merged_emotion);
+                                    }
+            mediaRecorder.onstop = async function () {
+               const blobVideo = new Blob(recordedChunks, { type: 'video/webm' });
+                const blobUrl = URL.createObjectURL(blobVideo);
+                recordedVideoElement.src = blobUrl;
+            
+                const formData = new FormData();
+                formData.append('video', blobVideo);
+            
+                const response = await fetch('/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+            
+                if (response.status === 200) {
+                    const responseData = await response.json();
+                    
+                    if (responseData.status === "success") {
+                        resultsData.push(responseData);
+                        const listItem = document.createElement('li');
+                        listItem.textContent = "분석된 시간: " + new Date().toLocaleString();
+                        listItem.dataset.timestamp = responseData.timeStamp.toString();  // .toString() 추가
+                        listItem.dataset.imagePath = responseData.imagePath;
+                        listItem.dataset.videoBlobUrl = blobUrl;  // 이 부분 추가
+                    
+                        listItem.addEventListener('click', (event) => {
+                            const selectedData = resultsData.find(item => item.timeStamp.toString() === event.currentTarget.dataset.timestamp);  // .toString() 추가, event.target을 event.currentTarget로 변경
+                            if (selectedData) {
+                                displayEmotionData(selectedData.emotions);
+                                document.getElementById("initialImage").classList.add('hidden');
+                                document.getElementById("retrievedImage").classList.remove('hidden');
+                                document.getElementById("retrievedImage").src = event.currentTarget.dataset.imagePath;  // event.target을 event.currentTarget로 변경
+                                // 추가된 부분: 비디오 URL을 설정
+                                recordedVideoElement.src = event.currentTarget.dataset.videoBlobUrl;
+                                recordedVideoElement.play();  // 비디오 재생 시작
+                            }
+                        });
+                        resultsList.appendChild(listItem);
+                        
+                        document.getElementById("initialImage").classList.add('hidden');
+                        
+                        // Display the retrieved image
+                        document.getElementById("retrievedImage").classList.remove('hidden');
+                        document.getElementById("retrievedImage").src = responseData.imagePath;
+                        
+                        displayEmotionData(responseData.emotions);
+                    } else {
+                        alert("Server returned an error: " + responseData.message);
+                    }
+                } else {
+                    console.error("Error uploading video:", await response.text());
+                }
+            };
+ 
+            startRecordButton.addEventListener('click', () => {
+                startRecordButton.innerText = '녹화중';
+                startRecordButton.disabled = true;
+                recordedChunks = [];
+                mediaRecorder.start();
+                setTimeout(() => {
+                    mediaRecorder.stop();
+                    // Revert the button text back to original after recording
+                    startRecordButton.innerText = '감정 녹화 및 분석 시작';
+                    startRecordButton.disabled = false; // Optional: Re-enable the button after recording
+                }, 5000);
+            });
+        }catch(error){
+        startRecordButton.innerText = '웹캠 접근 실패';
+        startRecordButton.disabled = true;
+        console.error(error)
+
+        alert('웹캠에 접근할 수 없습니다. 권한을 확인하거나 다른 문제가 있는지 확인하세요.');
+    }
+}
+        startWebcam();
+    </script>
+</body>
+
+</html>
